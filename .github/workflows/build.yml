@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Voice AI APK
 
 on:
   push:
@@ -36,7 +36,7 @@ jobs:
                   mavenCentral()
               }
           }
-          rootProject.name = "MyFirstPhoneApp"
+          rootProject.name = "ActionPulseAI"
           include(":app")
           EOF
 
@@ -64,8 +64,8 @@ jobs:
                   applicationId = "com.example.myapp"
                   minSdk = 24
                   targetSdk = 34
-                  versionCode = 1
-                  versionName = "1.0"
+                  versionCode = 2
+                  versionName = "2.0"
               }
               compileOptions {
                   sourceCompatibility = JavaVersion.VERSION_17
@@ -86,15 +86,17 @@ jobs:
               implementation("androidx.activity:activity-compose:1.8.2")
               implementation("androidx.compose.ui:ui")
               implementation("androidx.compose.material3:material3")
+              implementation("androidx.compose.material:material-icons-extended")
           }
           EOF
 
           cat << 'EOF' > app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.RECORD_AUDIO" />
               <application
-                  android:label="My Task App"
-                  android:theme="@android:style/Theme.Material.Light.NoActionBar">
+                  android:label="ActionPulse AI"
+                  android:theme="@android:style/Theme.Material.NoActionBar">
                   <activity
                       android:name=".MainActivity"
                       android:exported="true">
@@ -118,6 +120,5 @@ jobs:
       - name: Upload Ready APK
         uses: actions/upload-artifact@v4
         with:
-          name: My-Android-App-APK
+          name: ActionPulse-AI-APK
           path: app/build/outputs/apk/debug/app-debug.apk
-
