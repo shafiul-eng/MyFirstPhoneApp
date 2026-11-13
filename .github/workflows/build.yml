@@ -1,0 +1,143 @@
+name: Build Voice AI APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Generate Project Structure & Configs
+        run: |
+          mkdir -p app/src/main/java/com/example/myapp
+
+          cat << 'EOF' > settings.gradle.kts
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "ActionPulseAI"
+          include(":app")
+          EOF
+
+          cat << 'EOF' > gradle.properties
+          org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          EOF
+
+          cat << 'EOF' > build.gradle.kts
+          plugins {
+              id("com.android.application") version "8.2.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.22" apply false
+          }
+          EOF
+
+          cat << 'EOF' > app/build.gradle.kts
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+          android {
+              namespace = "com.example.myapp"
+              compileSdk = 34
+              defaultConfig {
+                  applicationId = "com.shafiul.actionpulse"
+                  minSdk = 24
+                  targetSdk = 34
+                  versionCode = 3
+                  versionName = "3.0"
+              }
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+              buildFeatures {
+                  compose = true
+              }
+              composeOptions {
+                  kotlinCompilerExtensionVersion = "1.5.8"
+              }
+          }
+          dependencies {
+              implementation(platform("androidx.compose:compose-bom:2024.02.00"))
+              implementation("androidx.activity:activity-compose:1.8.2")
+              implementation("androidx.compose.ui:ui")
+              implementation("androidx.compose.material3:material3")
+              implementation("androidx.compose.material:material-icons-extended")
+          }
+          EOF
+
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.RECORD_AUDIO" />
+              <uses-permission android:name="android.permission.INTERNET" />
+
+              <queries>
+                  <intent>
+                      <action android:name="android.speech.RecognitionService" />
+                  </intent>
+                  <intent>
+                      <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+                  </intent>
+                  <intent>
+                      <action android:name="android.intent.action.INSERT" />
+                      <data android:mimeType="vnd.android.cursor.dir/event" />
+                  </intent>
+              </queries>
+
+              <application
+                  android:label="ActionPulse AI"
+                  android:theme="@android:style/Theme.Material.NoActionBar">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.5'
+          cache-disabled: true
+      
+      - name: Assemble APK
+        run: gradle assembleDebug --stacktrace
+
+      - name: Upload Ready APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ActionPulse-AI-v3-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
