@@ -19,7 +19,8 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Generate Complete Project & MainActivity Code
+      - name: Step 1 - Create Gradle & Manifest Files
+        shell: bash
         run: |
           rm -rf app build settings.gradle.kts build.gradle.kts gradle.properties
           mkdir -p app/src/main/java/com/example/myapp
@@ -68,8 +69,8 @@ jobs:
                   applicationId = "com.shafiul.actionpulse.ai"
                   minSdk = 24
                   targetSdk = 34
-                  versionCode = 4
-                  versionName = "4.0"
+                  versionCode = 5
+                  versionName = "5.0"
               }
               compileOptions {
                   sourceCompatibility = JavaVersion.VERSION_17
@@ -101,7 +102,6 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.RECORD_AUDIO" />
               <uses-permission android:name="android.permission.INTERNET" />
-
               <queries>
                   <intent>
                       <action android:name="android.speech.RecognitionService" />
@@ -114,7 +114,6 @@ jobs:
                       <data android:mimeType="vnd.android.cursor.dir/event" />
                   </intent>
               </queries>
-
               <application
                   android:label="ActionPulse AI"
                   android:theme="@android:style/Theme.Material.NoActionBar">
@@ -130,6 +129,9 @@ jobs:
           </manifest>
           EOF
 
+      - name: Step 2 - Write MainActivity Kotlin Code
+        shell: bash
+        run: |
           cat << 'EOF' > app/src/main/java/com/example/myapp/MainActivity.kt
           package com.example.myapp
 
@@ -213,20 +215,17 @@ jobs:
           fun analyzeWithOfflineAI(rawInput: String): SmartAction {
               val text = rawInput.trim()
               val lower = text.lowercase(Locale.getDefault())
-
               val category = when {
                   listOf("মিটিং", "অফিস", "ক্লায়েন্ট", "প্রজেক্ট", "রিপোর্ট", "টিম", "meeting", "client", "project").any { lower.contains(it) } -> "অফিস 💼"
                   listOf("টাকা", "বিল", "পেমেন্ট", "বেতন", "খরচ", "বাজেট", "হিসাব", "bill", "payment").any { lower.contains(it) } -> "ফাইন্যান্স 💰"
                   listOf("কোড", "অ্যাপ", "বাগ", "সার্ভার", "গিটহাব", "সার্কিট", "code", "bug", "app").any { lower.contains(it) } -> "টেক/ডেভ ⚡"
                   else -> "পার্সোনাল 🎯"
               }
-
               val priority = when {
                   listOf("জরুরি", "আজই", "এখনই", "দ্রুত", "আর্জেন্ট", "অবশ্যই", "urgent", "asap", "must").any { lower.contains(it) } -> "জরুরি 🔥"
                   listOf("পরে", "সময় পেলে", "আগামী সপ্তাহে", "later").any { lower.contains(it) } -> "লো 🧊"
                   else -> "মিডিয়াম ⚡"
               }
-
               val deadline = when {
                   lower.contains("আজ") || lower.contains("today") -> "আজকের মধ্যে"
                   lower.contains("কাল") || lower.contains("আগামীকাল") || lower.contains("tomorrow") -> "আগামীকাল"
@@ -234,20 +233,12 @@ jobs:
                   lower.contains("সকাল") || lower.contains("morning") -> "সকালবেলা"
                   else -> "নির্ধারিত নয়"
               }
-
-              return SmartAction(
-                  id = System.currentTimeMillis(),
-                  title = text,
-                  category = category,
-                  priority = priority,
-                  deadline = deadline,
-                  isDone = false
-              )
+              return SmartAction(System.currentTimeMillis(), text, category, priority, deadline, false)
           }
 
           fun saveActionsOffline(context: Context, list: List<SmartAction>) {
               try {
-                  val prefs = context.getSharedPreferences("action_pulse_db_v4", Context.MODE_PRIVATE)
+                  val prefs = context.getSharedPreferences("action_pulse_db_v5", Context.MODE_PRIVATE)
                   val array = JSONArray()
                   list.forEach { item ->
                       val obj = JSONObject().apply {
@@ -271,7 +262,7 @@ jobs:
                   SmartAction(103L, "অফিসের ইন্টারনেট বিল ও খরচের হিসাব পেমেন্ট করা দরকার", "ফাইন্যান্স 💰", "জরুরি 🔥", "আজকের মধ্যে", true)
               )
               return try {
-                  val prefs = context.getSharedPreferences("action_pulse_db_v4", Context.MODE_PRIVATE)
+                  val prefs = context.getSharedPreferences("action_pulse_db_v5", Context.MODE_PRIVATE)
                   val data = prefs.getString("actions_data", null) ?: return defaultItems
                   val list = mutableListOf<SmartAction>()
                   val array = JSONArray(data)
@@ -279,12 +270,12 @@ jobs:
                       val obj = array.getJSONObject(i)
                       list.add(
                           SmartAction(
-                              id = obj.optLong("id", System.currentTimeMillis() + i),
-                              title = obj.getString("title"),
-                              category = obj.getString("category"),
-                              priority = obj.getString("priority"),
-                              deadline = obj.optString("deadline", "নির্ধারিত নয়"),
-                              isDone = obj.getBoolean("isDone")
+                              obj.optLong("id", System.currentTimeMillis() + i),
+                              obj.getString("title"),
+                              obj.getString("category"),
+                              obj.getString("priority"),
+                              obj.optString("deadline", "নির্ধারিত নয়"),
+                              obj.getBoolean("isDone")
                           )
                       )
                   }
@@ -301,15 +292,12 @@ jobs:
               var manualInput by remember { mutableStateOf("") }
               var selectedTab by remember { mutableIntStateOf(0) }
               var selectedCategoryFilter by remember { mutableStateOf("সব") }
-
               var isListening by remember { mutableStateOf(false) }
               var liveSpeechText by remember { mutableStateOf("") }
               var speechRecognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
 
               DisposableEffect(Unit) {
-                  onDispose {
-                      try { speechRecognizer?.destroy() } catch (_: Exception) {}
-                  }
+                  onDispose { try { speechRecognizer?.destroy() } catch (_: Exception) {} }
               }
 
               fun updateActions(newList: List<SmartAction>) {
@@ -326,8 +314,7 @@ jobs:
                       if (!matches.isNullOrEmpty()) {
                           val spoken = matches[0]
                           liveSpeechText = "\"$spoken\""
-                          val extracted = analyzeWithOfflineAI(spoken)
-                          updateActions(listOf(extracted) + actions)
+                          updateActions(listOf(analyzeWithOfflineAI(spoken)) + actions)
                       }
                   }
               }
@@ -338,14 +325,12 @@ jobs:
                       isListening = false
                       return
                   }
-
                   val voiceIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                       putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                       putExtra(RecognizerIntent.EXTRA_LANGUAGE, "bn-BD")
                       putExtra(RecognizerIntent.EXTRA_PROMPT, "বাংলা বা ইংরেজিতে আপনার কাজের কমান্ড বলুন...")
                       putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                   }
-
                   try {
                       if (!SpeechRecognizer.isRecognitionAvailable(context)) {
                           fallbackVoiceLauncher.launch(voiceIntent)
@@ -365,9 +350,7 @@ jobs:
                           override fun onEndOfSpeech() { isListening = false }
                           override fun onError(error: Int) {
                               isListening = false
-                              try {
-                                  fallbackVoiceLauncher.launch(voiceIntent)
-                              } catch (_: Exception) {
+                              try { fallbackVoiceLauncher.launch(voiceIntent) } catch (_: Exception) {
                                   liveSpeechText = "ভয়েস সার্ভিস পাওয়া যায়নি, নিচে টাইপ করে কমান্ড দিন।"
                               }
                           }
@@ -377,15 +360,12 @@ jobs:
                               if (!matches.isNullOrEmpty()) {
                                   val spoken = matches[0]
                                   liveSpeechText = "\"$spoken\""
-                                  val extracted = analyzeWithOfflineAI(spoken)
-                                  updateActions(listOf(extracted) + actions)
+                                  updateActions(listOf(analyzeWithOfflineAI(spoken)) + actions)
                               }
                           }
                           override fun onPartialResults(partialResults: Bundle?) {
                               val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                              if (!partial.isNullOrEmpty()) {
-                                  liveSpeechText = partial[0]
-                              }
+                              if (!partial.isNullOrEmpty()) liveSpeechText = partial[0]
                           }
                           override fun onEvent(eventType: Int, params: Bundle?) {}
                       })
@@ -403,9 +383,7 @@ jobs:
                   else Toast.makeText(context, "মাইক্রোফোন পারমিশন প্রয়োজন!", Toast.LENGTH_SHORT).show()
               }
 
-              val bgBrush = Brush.verticalGradient(
-                  colors = listOf(Color(0xFF060814), Color(0xFF0F172A), Color(0xFF070913))
-              )
+              val bgBrush = Brush.verticalGradient(listOf(Color(0xFF060814), Color(0xFF0F172A), Color(0xFF070913)))
 
               Box(
                   modifier = Modifier
@@ -414,16 +392,8 @@ jobs:
                       .statusBarsPadding()
                       .navigationBarsPadding()
               ) {
-                  Column(
-                      modifier = Modifier
-                          .fillMaxSize()
-                          .padding(horizontal = 16.dp, vertical = 12.dp)
-                  ) {
-                      Row(
-                          modifier = Modifier.fillMaxWidth(),
-                          horizontalArrangement = Arrangement.SpaceBetween,
-                          verticalAlignment = Alignment.CenterVertically
-                      ) {
+                  Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                           Column {
                               Text("ACTION PULSE AI", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF00F2FE))
                               Text("Offline Voice-to-Workflow Engine", fontSize = 12.sp, color = Color(0xFF94A3B8))
@@ -435,4 +405,16 @@ jobs:
                                   .border(1.dp, Color(0xFF00F2FE).copy(alpha = 0.4f), RoundedCornerShape(50))
                                   .padding(horizontal = 12.dp, vertical = 6.dp)
                           ) {
-                              Text("● v4.0 OFFLINE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0x
+                              Text("● v5.0 OFFLINE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF00F2FE))
+                          }
+                      }
+
+                      Spacer(modifier = Modifier.height(12.dp))
+
+                      val totalCount = actions.size
+                      val urgentCount = actions.count { it.priority.contains("জরুরি") && !it.isDone }
+                      val doneCount = actions.count { it.isDone }
+
+                      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                          StatGlassCard("মোট অ্যাকশন", "$totalCount", Color(0xFF38BDF8), Modifier.weight(1f))
+                          StatGlassCard("জরুরি কাজ", "$urgentCount", Color(0xFFF43F5E), 
